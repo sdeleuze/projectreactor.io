@@ -1,63 +1,53 @@
 package io.projectreactor;
 
-import io.projectreactor.ratpack.EnableRatpack;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import ratpack.error.ClientErrorHandler;
-import ratpack.func.Action;
-import ratpack.handling.Chain;
+import static org.springframework.http.HttpHeaders.*;
+import static org.springframework.http.HttpStatus.*;
+import static org.springframework.web.reactive.function.RequestPredicates.GET;
+import static org.springframework.web.reactive.function.RouterFunctions.route;
+import static org.springframework.web.reactive.function.ServerResponse.*;
+import reactor.ipc.netty.http.HttpServer;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.codec.BodyInserters;
+import org.springframework.http.server.reactive.HttpHandler;
+import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
+import org.springframework.web.reactive.function.RouterFunction;
+import org.springframework.web.reactive.function.RouterFunctions;
 
 /**
  * Main Application for the Project Reactor home site.
  */
-@Configuration
-@ComponentScan
-@EnableAutoConfiguration
-@EnableRatpack
 public class Application {
 
-	private static final Logger LOG = LoggerFactory.getLogger(Application.class);
-
-	@Bean
-	public ClientErrorHandler clientErrorHandler() {
-		return (ctx, statusCode) -> {
-			if (statusCode == 404) {
-				ctx.redirect("/404.html");
-			}
-			else {
-				LOG.error("client error: {}", statusCode);
-			}
-		};
+	public static void main(String... args) throws InterruptedException {
+		HttpHandler httpHandler = RouterFunctions.toHttpHandler(routes());
+		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
+		HttpServer server = HttpServer.create("localhost", 8080);
+		server.startAndAwait(adapter);
 	}
 
-	@Bean
-	public Action<Chain> ratpack() {
-		return chain -> {
-			chain.prefix("docs/api",
-					c -> c.handler(h -> h.redirect(h.getRequest()
-					                                .getUri()
-					                                .replace("/docs/", "/old/"))))
-			     .prefix("docs/reference",
-					     c -> c.handler(h -> h.redirect(h.getRequest()
-					                                     .getUri()
-					                                     .replace("/docs/", "/old/"))))
-			     .prefix("core/docs/reference",
-					     c -> c.handler(h -> h.redirect("https://github.com/reactor/reactor-core/blob/master/README.md")))
-			     .prefix("docs/raw",
-					     c -> c.handler(h -> h.redirect(h.getRequest()
-					                                     .getUri()
-					                                     .replace("/docs/", "/old/"))));
-		};
-	}
+	private static RouterFunction<?> routes() {
 
-	public static void main(String... args) {
-		SpringApplication.run(Application.class, args);
+		return route(GET("/docs/api/**"), request ->
+				status(FOUND).header(LOCATION, request.path().replace("/docs/", "/old/")).build()
+			).andRoute(GET("/docs/reference/**"), request ->
+				status(FOUND).header(LOCATION, request.path().replace("/docs/", "/old/")).build()
+			).andRoute(GET("/docs/raw/**"), request ->
+				status(FOUND).header(LOCATION, request.path().replace("/docs/", "/old/")).build()
+			).andRoute(GET("/core/docs/reference/**"), request ->
+				status(FOUND).header(LOCATION, "https://github.com/reactor/reactor-core/blob/master/README.md").build()
+			).andRoute(GET("/"), request ->
+				ok().body(BodyInserters.fromResource(new ClassPathResource("static/index.html")))
+			).andRoute(GET("/docs"), request ->
+				ok().body(BodyInserters.fromResource(new ClassPathResource("static/docs/index.html")))
+			).andRoute(GET("/{file}"), request ->
+				ok().body(BodyInserters.fromResource(new ClassPathResource("static/" + request.pathVariable("file"))))
+			).andRoute(GET("/assets/{dir}/{file}"), request -> {
+					Resource resource = new ClassPathResource("static/assets/" + request.pathVariable("dir") + "/" + request.pathVariable("file"));
+					return ok().body(BodyInserters.fromResource(resource));
+				}
+			);
 	}
 
 }
