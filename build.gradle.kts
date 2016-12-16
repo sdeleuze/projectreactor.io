@@ -50,7 +50,6 @@ configure<CompassExtension> {
 }
 
 repositories {
-    mavenLocal()
     mavenCentral()
     maven { setUrl("http://repo.spring.io/libs-milestone") }
     maven { setUrl("https://repo.spring.io/snapshot") }
